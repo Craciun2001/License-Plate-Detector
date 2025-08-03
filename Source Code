@@ -1,0 +1,81 @@
+import cv2
+import easyocr
+import numpy as np
+import matplotlib.pyplot as plt
+
+def show_image(title, img):
+    # Convert BGR to RGB for correct color display
+    if len(img.shape) == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    plt.figure(figsize=(10,6))
+    plt.title(title)
+    plt.imshow(img, cmap='gray' if len(img.shape) == 2 else None)
+    plt.axis('off')
+    plt.show()
+
+def detect_license_plate(image_path):
+    image = cv2.imread(image_path)
+    if image is None:
+        print("Image not found or unable to load.")
+        return
+
+    image = cv2.resize(image, (600, int(image.shape[0] * 600 / image.shape[1])))
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.bilateralFilter(gray, 11, 17, 17)
+
+    edged = cv2.Canny(blurred, 100, 200)
+
+    contours, _ = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:30]
+
+    debug_image = image.copy()
+    for contour in contours:
+        cv2.drawContours(debug_image, [contour], -1, (255, 0, 0), 2)
+    show_image("Top 30 Contours", debug_image)
+
+    license_plate_contour = None
+    for contour in contours:
+        peri = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.018 * peri, True)
+        if 4 <= len(approx) <= 6:
+            license_plate_contour = approx
+            break
+
+    if license_plate_contour is None:
+        print("No license plate contour detected. Trying OCR on the whole image...")
+        reader = easyocr.Reader(['en'])
+        result = reader.readtext(image)
+        if result:
+            print("Detected text(s):")
+            for (bbox, text, prob) in result:
+                print(f"  '{text}' with confidence {prob:.2f}")
+        else:
+            print("No text detected in the image.")
+        return
+
+    mask = np.zeros(gray.shape, np.uint8)
+    cv2.drawContours(mask, [license_plate_contour], 0, 255, -1)
+
+    new_image = cv2.bitwise_and(image, image, mask=mask)
+
+    (x, y) = np.where(mask == 255)
+    (topx, topy) = (np.min(x), np.min(y))
+    (bottomx, bottomy) = (np.max(x), np.max(y))
+    cropped = gray[topx:bottomx+1, topy:bottomy+1]
+
+    reader = easyocr.Reader(['en'])
+    result = reader.readtext(cropped)
+
+    if result:
+        print("Detected License Plate Text:", result[0][-2])
+        cv2.drawContours(image, [license_plate_contour], -1, (0, 255, 0), 3)
+        cv2.putText(image, result[0][-2], (topy, topx - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+        show_image("License Plate Detection", image)
+    else:
+        print("License plate text could not be read.")
+
+if _name_ == "_main_":
+    image_path = r"C:\Users\Craciun\Desktop\car.jpg"
+    detect_license_plate(image_path)

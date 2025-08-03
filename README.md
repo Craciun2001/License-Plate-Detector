@@ -20,13 +20,9 @@ Creates a binary mask to isolate the detected license plate region.
 
 Crops the plate region for further text recognition.
 
-OCR with EasyOCR:
-
 Performs text recognition on the cropped license plate using EasyOCR.
 
 If no plate contour is detected, OCR is applied to the entire image as a fallback.
-
-Visualization:
 
 Displays intermediate results such as detected contours and final license plate localization using Matplotlib.
 
